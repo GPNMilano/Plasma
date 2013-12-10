@@ -276,12 +276,14 @@ plKey plClickDragComponent::GetAxisKey(plMaxNode* node)
 
 void plClickDragComponent::CollectNonDrawables(INodeTab& nonDrawables)
 {
-    INode* boundsNode = fCompPB->GetINode(kClickDragProxy);
-    if(boundsNode && fCompPB->GetInt(kClickDragUseProxy))
-        nonDrawables.Append(1, &boundsNode);
-
-    boundsNode = fCompPB->GetINode(kClickDragProxyRegion);
-    if(boundsNode )
+    if( fCompPB->GetInt(kClickDragUseProxy) )
+    {
+        INode* dragNode = fCompPB->GetINode(kClickDragProxy);
+        if( dragNode )
+            nonDrawables.Append(1, &dragNode);
+    }
+    INode* boundsNode = fCompPB->GetINode(kClickDragProxyRegion);
+    if( boundsNode )
         nonDrawables.Append(1, &boundsNode);
 
 }
@@ -294,70 +296,62 @@ bool plClickDragComponent::SetupProperties(plMaxNode *node, plErrorMsg *pErrMsg)
     plActivatorBaseComponent::SetupProperties(node, pErrMsg);
 
     // Phys Props for the Clickable itself.
-    plMaxNode *boundsNode = nil;
-    boundsNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxy);
-    if(boundsNode && fCompPB->GetInt(kClickDragUseProxy))
-        if(boundsNode->CanConvert())
-        {
-            boundsNode->SetDrawable(false);
-            plPhysicalProps *physProps = boundsNode->GetPhysicalProps();
-            // only if movable will it have mass (then it will keep track of movements in PhysX)
-            if ( boundsNode->IsMovable() || boundsNode->IsTMAnimatedRecur() )
-                physProps->SetMass(1.0, boundsNode, pErrMsg);
-            physProps->SetGroup( plSimDefs::kGroupStatic, boundsNode, pErrMsg);
-//          physProps->SetReportGroup( plPhysicsGroups::kLocalAvatars, boundsNode, pErrMsg);
-            physProps->SetBoundsType(fCompPB->GetInt(kClikDragBoundsType), boundsNode, pErrMsg);
-        }
+    plMaxNode *dragNode = node;
+    if (fCompPB->GetInt(kClickDragUseProxy))
+    {
+        dragNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxy);
+        if (dragNode)
+            dragNode->SetDrawable(false);
         else
-        {
-                pErrMsg->Set(true, "Clickable Sensor Warning", "The Clickable %s has a Proxy Surface %s that was Ignored.\nThe Sensors geometry will be used instead.", node->GetName(), boundsNode->GetName()).Show();
-                pErrMsg->Set(false);
-        }
-    else
-    {   
-        
-        plPhysicalProps *physProps = node->GetPhysicalProps();
-        // only if movable will it have mass (then it will keep track of movements in PhysX)
-        if ( node->IsMovable() || node->IsTMAnimatedRecur() )
-            physProps->SetMass(1.0, node, pErrMsg);
-        physProps->SetGroup( plSimDefs::kGroupStatic, node, pErrMsg);
-//      physProps->SetReportGroup( plPhysicsGroups::kLocalAvatars, node, pErrMsg);
-        //node->GetPhysicalProps()->SetAllCollideGroups(0);
-        physProps->SetBoundsType(fCompPB->GetInt(kClikDragBoundsType), node, pErrMsg);
+            dragNode = node;
     }
+
+    if(dragNode)
+    {
+        plPhysicalProps *physProps = dragNode->GetPhysicalProps();
+        physProps->SetLOSUIItem(true, dragNode, pErrMsg);
+        // only if movable will it have mass (then it will keep track of movements in PhysX)
+        if ( dragNode->IsMovable() || dragNode->IsTMAnimatedRecur() )
+            physProps->SetMass(1.0, dragNode, pErrMsg);
+        physProps->SetGroup( plSimDefs::kGroupStatic, dragNode, pErrMsg);
+        physProps->SetFriction(0.0, dragNode, pErrMsg);
+//      physProps->SetReportGroup( plPhysicsGroups::kLocalAvatars, dragNode, pErrMsg);
+        physProps->SetBoundsType(fCompPB->GetInt(kClikDragBoundsType), dragNode, pErrMsg);
+    }
+
     // Phys Properties for the auto-generated Detector Region...
-    boundsNode = nil;
-    boundsNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxyRegion);
+    plMaxNode* boundsNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxyRegion);
     if(boundsNode)
     {
-        if(boundsNode->CanConvert())
-        {
-            plPhysicalProps *physPropsDetector = boundsNode->GetPhysicalProps();
-//          physPropsDetector->SetAllowLOS(true, boundsNode, pErrMsg);
-            physPropsDetector->SetProxyNode(boundsNode, node, pErrMsg);
-            physPropsDetector->SetBoundsType(plSimDefs::kHullBounds, boundsNode, pErrMsg);
-            // only if movable will it have mass (then it will keep track of movements in PhysX)
-            if ( boundsNode->IsMovable() || boundsNode->IsTMAnimated() )
-                physPropsDetector->SetMass(1.0, boundsNode, pErrMsg);
+        plPhysicalProps *physPropsDetector = boundsNode->GetPhysicalProps();
+//      physPropsDetector->SetAllowLOS(true, boundsNode, pErrMsg);
+        physPropsDetector->SetProxyNode(boundsNode, node, pErrMsg);
+        physPropsDetector->SetBoundsType(plSimDefs::kHullBounds, boundsNode, pErrMsg);
+        // only if movable will it have mass (then it will keep track of movements in PhysX)
+        if ( boundsNode->IsMovable() || boundsNode->IsTMAnimatedRecur() )
+            physPropsDetector->SetMass(1.0, boundsNode, pErrMsg);
 
-            physPropsDetector->SetGroup( plSimDefs::kGroupDetector, boundsNode, pErrMsg );
-            //boundsNode->GetPhysicalProps()->SetAllCollideGroups(0);
-            physPropsDetector->SetReportGroup( 1<<plSimDefs::kGroupAvatar, boundsNode, pErrMsg );
-        }
+        physPropsDetector->SetGroup(plSimDefs::kGroupDetector, boundsNode, pErrMsg );
+        //boundsNode->GetPhysicalProps()->SetAllCollideGroups(0);
+        physPropsDetector->SetReportGroup(1<<plSimDefs::kGroupAvatar, boundsNode, pErrMsg );
     }
-    else
-    {
-        pErrMsg->Set(true, "Clickable Sensor Error", "The Clickable Sensor %s has a Required Region that is missing.\nThe Export will be aborted", node->GetName()).Show();
-//      pErrMsg->Set(false);
-        return false;
-    }
-    
+
     fAxisKeys.clear();
     return true;
 }
 
 bool plClickDragComponent::PreConvert(plMaxNode *node, plErrorMsg *pErrMsg)
 {
+    plMaxNode *dragNode = node;
+    if (fCompPB->GetInt(kClickDragUseProxy))
+    {
+        dragNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxy);
+        if (dragNode)
+            dragNode->SetDrawable(false);
+        else
+            dragNode = node;
+    }
+
     plActivatorBaseComponent::PreConvert(node, pErrMsg);
     plLogicModifier *logic = plLogicModifier::ConvertNoRef(fLogicModKeys[node]->GetObjectPtr());
 
@@ -380,6 +374,37 @@ bool plClickDragComponent::PreConvert(plMaxNode *node, plErrorMsg *pErrMsg)
 
 bool plClickDragComponent::Convert(plMaxNode *node, plErrorMsg *pErrMsg)
 {
+    //
+    // Error checking
+    //
+    plMaxNode* dragProxyNode = node;
+    if (fCompPB->GetInt(kClickDragUseProxy))
+    {
+        dragProxyNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxy);
+        if (!dragProxyNode || !dragProxyNode->CanConvert())
+        {
+            pErrMsg->Set(true,
+                        "Draggable Error",
+                        "The Draggaable '%s' on node '%s' is set to use a proxy but doesn't have one, or it didn't convert.\n"
+                        "The node the Draggable is attached to will be used instead.",
+                        GetINode()->GetName(), node->GetName()).Show();
+            pErrMsg->Set(false);
+
+            dragProxyNode = node;
+        }
+    }
+
+    plMaxNode* boundsNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxyRegion);
+    if (!boundsNode || !boundsNode->CanConvert())
+    {
+        pErrMsg->Set(true,
+                    "Draggable Error",
+                    "The Draggable '%s' on node '%s' has a required region that is missing, or didn't convert.\n"
+                    "The export will be aborted.",
+                    GetINode()->GetName(), node->GetName()).Show();
+        return false;
+    }
+
     plLocation loc = node->GetLocation();
     plSceneObject *obj = node->GetSceneObject();
     
@@ -387,7 +412,7 @@ bool plClickDragComponent::Convert(plMaxNode *node, plErrorMsg *pErrMsg)
     plLogicModifier *logic = plLogicModifier::ConvertNoRef(logicKey->GetObjectPtr());
     logic->fMyCursor = plCursorChangeMsg::kCursorOpen;
 
-        // Create the detector
+    // Create the detector
     plDetectorModifier *detector = nil;
     detector = new plPickingDetector;
 
@@ -396,12 +421,11 @@ bool plClickDragComponent::Convert(plMaxNode *node, plErrorMsg *pErrMsg)
     hsgResMgr::ResMgr()->AddViaNotify(detectorKey, new plObjRefMsg(obj->GetKey(), plRefMsg::kOnCreate, -1, plObjRefMsg::kModifier), plRefFlags::kActiveRef);
 
     // set up the axis anim controller
-    
     plKey axisKey = fAxisKeys[node];
     plAxisAnimModifier* pAxis = plAxisAnimModifier::ConvertNoRef(axisKey->GetObjectPtr());
+
     // attach the animation controller to the animation objects:
     // find an animation controller:
-    
     hsTArray<plKey> receivers;
     IGetReceivers(node, receivers);
     
@@ -479,108 +503,24 @@ bool plClickDragComponent::Convert(plMaxNode *node, plErrorMsg *pErrMsg)
         plgDispatch::MsgSend(pMsg);
     }
 
-
-    // is this a using a proxy primitive?
-    plPickingDetector* det2 = nil;
-    plKey det2Key  = nil;
-    plMaxNode* pProxyNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxy);
-    
-    if (pProxyNode && fCompPB->GetInt(kClickDragUseProxy))
-    {
-        
-        // verify that there is a physical proxy attached to this scene object:
-        uint32_t count = ((plMaxNodeBase*)pProxyNode)->NumAttachedComponents();
-        bool bHasPhys = false;
-//      for (uint32_t i = 0; i < count; i++)
-        //      {
-        //          plComponentBase *comp = ((plMaxNodeBase*)pProxyNode)->GetAttachedComponent(i);
-        //          if (comp->ClassID() == Class_ID(0x11e81ee4, 0x36b81450))
-        //          {
-        //              bHasPhys = true;
-        //              break;
-        //          }
-        //      }
-        //      if (!bHasPhys)
-        //      {
-        //          pErrMsg->Set(true, "WARNING", "Object %s listed as draggable component proxy physical for %s but has NO physical component.\n  Please attach a proxyTerrain componet!\n Export will continue but this gadget will not function",pProxyNode->GetName(), ((INode*)node)->GetName()).Show();
-        //          pErrMsg->Set(false);
-        //      }
-        
-
-        if(pProxyNode->CanConvert())
-        {
-            det2 = new plPickingDetector;
-            // Register the detector
-            det2Key = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), det2, loc);
-            hsgResMgr::ResMgr()->AddViaNotify(det2Key, new plObjRefMsg(((plMaxNode*)pProxyNode)->GetSceneObject()->GetKey(), plRefMsg::kOnCreate, -1, plObjRefMsg::kModifier), plRefFlags::kActiveRef);
-            hsgResMgr::ResMgr()->AddViaNotify(logicKey, new plObjRefMsg( det2Key, plRefMsg::kOnCreate, -1, plObjRefMsg::kModifier), plRefFlags::kActiveRef);
-            det2->SetProxyKey(node->GetSceneObject()->GetKey());
-        }
-        else
-        {
-            pErrMsg->Set(true, "Unknown Error", "Invalid proxy physical detector set for draggable %s.", ((INode*)pProxyNode)->GetName()).Show();
-            pErrMsg->Set(false);
-            return false;
-        }
-    
-    }
-
-
-
     // create and register the CONDITIONS for the DETECTOR's Logic Modifier
     plActivatorConditionalObject* activatorCond = new plActivatorConditionalObject;
     plKey activatorKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), activatorCond, loc);
 
-    // do we have a required region?
-    plMaxNode* pProxyRegNode = (plMaxNode*)fCompPB->GetINode(kClickDragProxyRegion);
-    if (pProxyRegNode)
-    {
-        // verify that there is a physical detector attached to this scene object:
-        uint32_t count = ((plMaxNodeBase*)pProxyRegNode)->NumAttachedComponents();
-        bool bHasPhys = false;
-//      for (uint32_t i = 0; i < count; i++)
-        //      {
-        //          plComponentBase *comp = ((plMaxNodeBase*)pProxyRegNode)->GetAttachedComponent(i);
-        //          if (comp->ClassID() == Class_ID(0x33b60376, 0x7e5163e0))
-        //          {
-        //              bHasPhys = true;
-        //              break;
-        //          }
-        //      }
-        //      if (!bHasPhys)
-        //      {
-        //          pErrMsg->Set(true, "WARNING", "Object %s listed as draggable component detector region for %s but has NO physical detector component!\n  Please attach a detector componet.\n Export will continue but this gadget will not function",((INode*)pProxyRegNode)->GetName(), ((INode*)node)->GetName()).Show();
-        //          pErrMsg->Set(false);
-        //      }
-        
+    //
+    // Create required region
+    //
+    // need a player in box condition here...
+    // first a detector-any for the box
+    plObjectInVolumeDetector* pCDet = new plObjectInVolumeDetector(plCollisionDetector::kTypeAny);
+    plKey cDetKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), pCDet, loc);
+    hsgResMgr::ResMgr()->AddViaNotify(cDetKey, new plObjRefMsg(boundsNode->GetSceneObject()->GetKey(), plRefMsg::kOnCreate, -1, plObjRefMsg::kModifier), plRefFlags::kActiveRef);
+    pCDet->AddLogicObj(logicKey);
 
-        if(pProxyRegNode->CanConvert())
-        {
-            // need a player in box condition here...
-            // first a detector-any for the box
-            plObjectInVolumeDetector* pCDet = new plObjectInVolumeDetector(plCollisionDetector::kTypeAny);
-            plKey cDetKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), pCDet, loc);
-            hsgResMgr::ResMgr()->AddViaNotify(cDetKey, new plObjRefMsg(((plMaxNode*)pProxyRegNode)->GetSceneObject()->GetKey(), plRefMsg::kOnCreate, -1, plObjRefMsg::kModifier), plRefFlags::kActiveRef);
-            pCDet->AddLogicObj(logicKey);
-            // then an object-in-box condition for the logic mod
-            plObjectInBoxConditionalObject* boxCond = new plObjectInBoxConditionalObject;
-            plKey boxCondKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), boxCond, loc);
-            logic->AddCondition(boxCond);
-        }
-        else
-        {       
-            pErrMsg->Set(true, "Problem with region", "Can't convert region component on  %s.  This component will not be exported.\n", ((INode*)pProxyRegNode)->GetName()).Show();
-            pErrMsg->Set(false);
-            return false;
-        }
-    }
-    else
-    {
-        pErrMsg->Set(true, "Must specify trigger region", "No required trigger region specified for click-drag component on %s.  This component will not be exported.\n", ((INode*)node)->GetName()).Show();
-        pErrMsg->Set(false);
-        return false;
-    }
-
+    // then an object-in-box condition for the logic mod
+    plObjectInBoxConditionalObject* boxCond = new plObjectInBoxConditionalObject;
+    plKey boxCondKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), boxCond, loc);
+    logic->AddCondition(boxCond);
 
     // How do we feel about player facing
     plFacingConditionalObject* facingCond = new plFacingConditionalObject;
@@ -592,20 +532,12 @@ bool plClickDragComponent::Convert(plMaxNode *node, plErrorMsg *pErrMsg)
     facingCond->SetTolerance(cos(rad));
     plKey facingKey = hsgResMgr::ResMgr()->NewKey(IGetUniqueName(node), facingCond, loc);
     
+    detector->AddLogicObj(logicKey);     // send messages to this logic component
+    activatorCond->SetActivatorKey(detectorKey); // Tells the activator condition to look for stimulus from the detector
     
-    // link everything up:
-    if (det2) // set up the remote detector (if any)
-    {
-        activatorCond->SetActivatorKey(det2Key);
-        det2->AddLogicObj(logicKey);
-    }
-    else
-    {
-        detector->AddLogicObj(logicKey);     // send messages to this logic component
-        activatorCond->SetActivatorKey(detectorKey); // Tells the activator condition to look for stimulus from the detector
-    }
     logic->AddCondition(activatorCond); // add this activator condition
     logic->AddCondition(facingCond);
+
     logic->SetDisabled(fCompPB->GetInt(kClikDragEnabled) == 0);
 
     
